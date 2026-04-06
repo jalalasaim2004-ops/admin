@@ -1,18 +1,47 @@
 import { Link, useLocation } from "react-router-dom";
-import { Activity, Calendar, Search, User, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { Activity, Calendar, Search, User, Menu, X, Bell } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const location = useLocation();
+  const notifRef = useRef<HTMLDivElement>(null);
 
   const navLinks = [
     { name: "الرئيسية", path: "/" },
     { name: "ابحث عن طبيب", path: "/search" },
     { name: "مواعيدي", path: "/dashboard" },
   ];
+
+  const notifications = [
+    {
+      id: 1,
+      title: "تذكير بموعد",
+      message: "موعدك مع د. أحمد محمود غداً الساعة 10:30 ص.",
+      time: "منذ ساعتين",
+      unread: true,
+    },
+    {
+      id: 2,
+      title: "تأكيد الحجز",
+      message: "تم تأكيد حجزك مع د. نورة السالم.",
+      time: "منذ يومين",
+      unread: false,
+    }
+  ];
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200">
@@ -47,6 +76,55 @@ export default function Navbar() {
               ))}
             </div>
             <div className="flex items-center gap-4">
+              {/* Notifications */}
+              <div className="relative" ref={notifRef}>
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                >
+                  <Bell className="w-5 h-5" />
+                  {notifications.some(n => n.unread) && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {showNotifications && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute left-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden"
+                    >
+                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h3 className="font-bold text-slate-900">الإشعارات</h3>
+                        <span className="text-xs text-blue-600 font-medium cursor-pointer hover:underline">تحديد الكل كمقروء</span>
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {notifications.map((notif) => (
+                          <div 
+                            key={notif.id} 
+                            className={cn(
+                              "p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors cursor-pointer",
+                              notif.unread ? "bg-blue-50/30" : ""
+                            )}
+                          >
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className={cn("text-sm font-bold", notif.unread ? "text-slate-900" : "text-slate-700")}>
+                                {notif.title}
+                              </h4>
+                              {notif.unread && <span className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></span>}
+                            </div>
+                            <p className="text-sm text-slate-600 mb-2">{notif.message}</p>
+                            <span className="text-xs text-slate-400">{notif.time}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <Link
                 to="/dashboard"
                 className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-blue-600 transition-colors"
