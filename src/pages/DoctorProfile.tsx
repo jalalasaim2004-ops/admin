@@ -1,12 +1,13 @@
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { Star, MapPin, Clock, ShieldCheck, Calendar as CalendarIcon, CheckCircle2 } from "lucide-react";
+import { Star, MapPin, Clock, ShieldCheck, Calendar as CalendarIcon, CheckCircle2, ChevronRight, ChevronLeft, Map as MapIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { doctors } from "@/data/mockData";
 import { cn } from "@/lib/utils";
-import { format, addDays } from "date-fns";
+import { format, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isBefore, startOfDay } from "date-fns";
 import { ar } from "date-fns/locale";
 import DoctorReviews from "@/components/DoctorReviews";
+import Map from "@/components/Map";
 
 import { loadStripe } from "@stripe/stripe-js";
 
@@ -17,8 +18,13 @@ export default function DoctorProfile() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const doctor = doctors.find(d => d.id === id);
+  
+  // Calendar state
+  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  
+  // Booking state
   const [isBooking, setIsBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(
     searchParams.get("canceled") === "true" ? "تم إلغاء عملية الدفع. لم يتم تأكيد الحجز." : null
@@ -36,8 +42,15 @@ export default function DoctorProfile() {
     );
   }
 
-  // Generate next 7 days
-  const nextDays = Array.from({ length: 7 }).map((_, i) => addDays(new Date(), i));
+  // Calendar logic
+  const daysInMonth = eachDayOfInterval({
+    start: startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 }), // 0 = Sunday
+    end: endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 })
+  });
+
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+  const today = startOfDay(new Date());
 
   const handleBook = async () => {
     if (!selectedSlot) return;
@@ -134,6 +147,21 @@ export default function DoctorProfile() {
               </div>
             </div>
 
+            {/* Map Section */}
+            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200">
+              <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <MapIcon className="w-6 h-6 text-blue-600" />
+                موقع العيادة
+              </h3>
+              <div className="h-[300px] rounded-2xl overflow-hidden border border-slate-200 relative z-0">
+                <Map doctors={[doctor as any]} center={doctor.coordinates as [number, number]} zoom={13} />
+              </div>
+              <p className="mt-4 text-slate-600 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-slate-400" />
+                {doctor.location}
+              </p>
+            </div>
+
             {/* Reviews */}
             <DoctorReviews doctorId={doctor.id} />
           </div>
@@ -161,26 +189,57 @@ export default function DoctorProfile() {
                       </div>
                     </div>
 
-                    {/* Date Selection */}
+                    {/* Full Calendar View */}
                     <div className="mb-6">
-                      <h4 className="text-sm font-medium text-slate-700 mb-3">اختر اليوم</h4>
-                      <div className="flex gap-2 overflow-x-auto pb-2 snap-x scrollbar-hide">
-                        {nextDays.map((date, i) => {
-                          const isSelected = date.toDateString() === selectedDate.toDateString();
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-bold text-slate-900">
+                          {format(currentMonth, "MMMM yyyy", { locale: ar })}
+                        </h4>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={nextMonth}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={prevMonth}
+                            disabled={isBefore(currentMonth, startOfMonth(today))}
+                            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1 mb-2">
+                        {["ح", "ن", "ث", "ر", "خ", "ج", "س"].map((day, i) => (
+                          <div key={i} className="text-center text-xs font-medium text-slate-500 py-2">
+                            {day}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1">
+                        {daysInMonth.map((date, i) => {
+                          const isSelected = isSameDay(date, selectedDate);
+                          const isCurrentMonth = isSameMonth(date, currentMonth);
+                          const isPast = isBefore(startOfDay(date), today);
+
                           return (
                             <button
                               key={i}
-                              onClick={() => setSelectedDate(date)}
+                              onClick={() => !isPast && setSelectedDate(date)}
+                              disabled={isPast}
                               className={cn(
-                                "flex flex-col items-center justify-center min-w-[4.5rem] p-3 rounded-2xl border transition-all snap-start",
-                                isSelected 
-                                  ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20" 
-                                  : "bg-white border-slate-200 text-slate-600 hover:border-blue-300"
+                                "aspect-square flex items-center justify-center rounded-xl text-sm font-medium transition-all",
+                                !isCurrentMonth && "text-slate-300",
+                                isCurrentMonth && !isPast && !isSelected && "text-slate-700 hover:bg-blue-50 hover:text-blue-600",
+                                isPast && "text-slate-300 cursor-not-allowed",
+                                isSelected && "bg-blue-600 text-white shadow-md shadow-blue-600/20"
                               )}
                             >
-                              <span className="text-xs mb-1">{format(date, "EEEE", { locale: ar })}</span>
-                              <span className="text-lg font-bold">{format(date, "d")}</span>
-                              <span className="text-xs">{format(date, "MMM", { locale: ar })}</span>
+                              {format(date, "d")}
                             </button>
                           );
                         })}

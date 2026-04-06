@@ -1,16 +1,19 @@
 import { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Calendar, Clock, MapPin, User, Settings, LogOut, ChevronRight, X, CheckCircle2 } from "lucide-react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Calendar, Clock, MapPin, User, Settings, LogOut, ChevronRight, X, CheckCircle2, LogIn } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { mockAppointments, doctors } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 import { format, addDays } from "date-fns";
 import { ar } from "date-fns/locale";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
   const [appointments, setAppointments] = useState(mockAppointments);
+  const { user, profile, logout, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
   
   // Reschedule state
   const [reschedulingAppointment, setReschedulingAppointment] = useState<any | null>(null);
@@ -27,6 +30,27 @@ export default function Dashboard() {
       setTimeout(() => setPaymentSuccess(false), 5000);
     }
   }, [searchParams]);
+
+  if (!user) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center bg-slate-50">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center max-w-md w-full mx-4">
+          <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <User className="w-10 h-10" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">يرجى تسجيل الدخول</h2>
+          <p className="text-slate-600 mb-8">يجب عليك تسجيل الدخول لعرض وإدارة مواعيدك الطبية.</p>
+          <button
+            onClick={() => signInWithGoogle('patient')}
+            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20"
+          >
+            <LogIn className="w-5 h-5" />
+            <span>تسجيل الدخول باستخدام جوجل</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const filteredAppointments = appointments.filter(
     app => activeTab === "upcoming" ? app.status === "upcoming" : app.status === "completed"
@@ -54,10 +78,19 @@ export default function Dashboard() {
       setIsSubmitting(false);
       setSuccessMessage(true);
       
+      // Dispatch notification event for patient and doctor
+      const event = new CustomEvent("new-notification", {
+        detail: {
+          title: "تم تأجيل الموعد",
+          message: `تم تأجيل موعدك مع ${reschedulingAppointment.doctorName} إلى ${format(selectedDate, "d MMMM", { locale: ar })} الساعة ${selectedSlot}.`
+        }
+      });
+      window.dispatchEvent(event);
+      
       setTimeout(() => {
         setReschedulingAppointment(null);
         setSuccessMessage(false);
-      }, 2000);
+      }, 5000);
     }, 1000);
   };
 
@@ -84,11 +117,15 @@ export default function Dashboard() {
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 sticky top-24">
               <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-100">
                 <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl font-bold">
-                  أ
+                  {profile?.displayName ? profile.displayName.charAt(0) : user.email?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="font-bold text-slate-900">أحمد محمد</h2>
-                  <p className="text-sm text-slate-500">مريض مسجل</p>
+                  <h2 className="font-bold text-slate-900 truncate max-w-[120px]">
+                    {profile?.displayName || user.email?.split('@')[0]}
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    {profile?.role === 'admin' ? 'مدير النظام' : profile?.role === 'doctor' ? 'طبيب' : 'مريض مسجل'}
+                  </p>
                 </div>
               </div>
 
@@ -113,10 +150,16 @@ export default function Dashboard() {
                   </div>
                 </a>
                 <div className="pt-4 mt-4 border-t border-slate-100">
-                  <a href="#" className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl font-medium transition-colors">
+                  <button 
+                    onClick={() => {
+                      logout();
+                      navigate('/');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl font-medium transition-colors"
+                  >
                     <LogOut className="w-5 h-5" />
                     <span>تسجيل الخروج</span>
-                  </a>
+                  </button>
                 </div>
               </nav>
             </div>
